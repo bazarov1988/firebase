@@ -15,7 +15,7 @@ const getActualCompetition = async () => {
         const competitionsRes = await db.collection('competitions').where('completedTime', '<=', Date.now()).get();
         if (competitionsRes.size) {
             const competitions = competitionsRes.docs.map(item => ({id: item.id, ...item.data()}));
-            for (const id of competition[0].users) {
+            for (const id of competitions[0].users) {
                 await db.collection("users").doc(id).update({
                     isWaiting: false,
                     competition: '',
@@ -73,6 +73,7 @@ const check = async () => {
                 document.getElementById('join-block').style.display = 'none';
                 document.getElementById('connecting-block').style.display = 'none';
                 document.getElementById('connected-block').style.display = 'block';
+                await checkGameFinished();
             } else if (user.isWaiting) {
                 console.log('user is still waiting');
                 document.getElementById('connecting-block').style.display = 'block';
@@ -106,7 +107,6 @@ const check = async () => {
                         }
                     }
                 }
-
                 setTimeout(await check(), 1000)
             }
         }
@@ -114,6 +114,41 @@ const check = async () => {
     }
 }
 
+const checkGameFinished = async () => {
+    if (userId) {
+        const doc = await db.collection('users').doc(userId).get();
+        if (doc.exists) {
+            const user = doc.data();
+            if (!user.isWaiting && user.competition) {
+                const competitionDoc = await db.collection('competitions').doc(user.competition).get();
+                if (competitionDoc.exists) {
+                    const competition = competitionDoc.data();
+                    if (competition.completedTime <= Date.now() && competition.users.length) {
+                        for (const id of competition.users) {
+                            await db.collection("users").doc(id).update({
+                                isWaiting: false,
+                                competition: '',
+                            })
+                        }
+                        await db.collection("competitions").doc(competition.id).update({
+                            users: [],
+                            startedTime: 0,
+                            completedTime: 0,
+                            isActual: false
+                        });
+                        alert(`Competition finished for user ${userId}`);
+                        document.getElementById('join-block').style.display = 'block';
+                        document.getElementById('connecting-block').style.display = 'none';
+                        document.getElementById('connected-block').style.display = 'none';
+                    } else {
+                        setTimeout(await checkGameFinished(), 1000)
+                    }
+                }
+            }
+
+        }
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     const loadEl = document.querySelector('#load');
